@@ -1,2 +1,49 @@
 # Cormack-Jolly-Seber model with Age effects
+# ===========================================
+# Important:
+#   Model assumes that all individuals are first caught at age '1'
+#   Each column of capture history should correspone to the same time step as assumed for age group
+##   i.e. if it is yearly age groups, it should be a yearly capture history
 
+# -------------
+# USER INPUTS
+# Replace ... with desired information
+# -------------
+
+# Read in Capture history
+CH <- read.delim("...", header=FALSE)
+
+# Specify number of age groups (i.e. 1 year old and 2+ years old would be 2 groups)
+#   Maximum allowed is 10
+n_g <- ...
+
+# =============================================
+# From this point simply run the code
+
+# Creates vector with occassion of first marking
+get.first <- function(x) min(which(x!=0))
+f <- apply(CH, 1, get.first)
+
+# Create matrix x indicating age class
+x <- matrix(NA, ncol = dim(CH)[2]+10, nrow = dim(CH)[1])
+n_groups <- seq(1:10, by=1)
+for (n in n_g:10){
+  n_groups[n] <- n_g
+}
+
+for (i in 1:dim(CH)[1]){
+  for (t in f[i]:(dim(CH)[2]-1)){
+    x[i,t+9] <- n_groups[10]
+    x[i,f[i]+8] <- n_groups[9]
+    x[i,f[i]+7] <- n_groups[8]
+    x[i,f[i]+6] <- n_groups[7]  
+    x[i,f[i]+5] <- n_groups[6]  
+    x[i,f[i]+4] <- n_groups[5]  
+    x[i,f[i]+3] <- n_groups[4]  
+    x[i,f[i]+2] <- n_groups[3]  
+    x[i,f[i]+1] <- n_groups[2]  
+    x[i,f[i]] <- n_groups[1]  
+  } #t
+} #i
+
+x <- x[,-((dim(CH)[2]+1):(dim(CH)[2]+11))]
