@@ -34,7 +34,6 @@ CH <- read.delim("...", header=FALSE)
 n_g <- ...
 
 # =============================================
-# From this point simply run the code
 
 # Creates vector with occassion of first marking
 get.first <- function(x) min(which(x!=0))
@@ -42,7 +41,7 @@ f <- apply(CH, 1, get.first)
 
 # Create matrix x indicating age class
 x <- matrix(NA, ncol = dim(CH)[2]+10, nrow = dim(CH)[1])
-n_groups <- seq(1:10, by=1)
+n_groups <- seq(1, 10, by=1)
 for (n in n_g:10){
   n_groups[n] <- n_g
 }
