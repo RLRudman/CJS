@@ -5,4 +5,6 @@ This repository contains code for CJS models that can be used to analyse both ag
 
 Models are based on JAGS in R.
 
-My aim is to make all the models easy to use with the aim that other users simply input key information and then the code will do data sorting/editing and run the model.
+My aim is to make all the models easy to use, such at users simply input data and specify some information and then run the code.
+
+For specific details about each model, including a description, assumptions, data input etc. see corresponding Wiki pages.
