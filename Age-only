@@ -1,11 +1,25 @@
-# NOT COMPLETE
-
 # Cormack-Jolly-Seber model with Age effects
 # ===========================================
 # Important:
 #   Model assumes that all individuals are first caught at age '1'
 #   Each column of capture history should correspone to the same time step as assumed for age group
 ##   i.e. if it is yearly age groups, it should be a yearly capture history
+# -------------------------------------------
+# Priors are
+#   beta: uninformative uniform distribution bound at 0 and 1
+#   p.t: uninformative uniform distribution bound at 0 and 1
+# MCMC settings are
+#   100,000 iterations, 3 thinning, 10,000 burnin, 3 chains.
+# -------------------------------------------
+# Parameter outputs are
+#   beta: age-specific survival rates
+#   p.t:  recapture rates with random year effect
+# -------------------------------------------
+# Summary/graphical outputs are
+#   Summary of beta and p.t
+#   Graph showing posterior mean and 95% CRI for beta
+#   Graph showing posterior mean and 95% CRI over time for p.t
+# -------------------------------------------
 
 # -------------
 # USER INPUTS
@@ -49,3 +63,119 @@ for (i in 1:dim(CH)[1]){
 } #i
 
 x <- x[,-((dim(CH)[2]+1):(dim(CH)[2]+11))]
+
+# Create functions
+
+# Function to create a matrix with information about known latent state z
+known.state.cjs <- function(ch){
+  state <- ch
+  for (i in 1:dim(ch)[1]){
+    n1 <- min(which(ch[i,]==1))
+    n2 <- max(which(ch[i,]==1))
+    state[i,n1:n2] <- 1
+    state[i,n1] <- NA
+  }
+  state[state==0] <- NA
+  return(state)
+}
+
+# Function to create a matrix of initial values for latent state z
+cjs.init.z <- function(ch,f){
+  for (i in 1:dim(ch)[1]){
+    if (sum(ch[i,])==1) next
+    n2 <- max(which(ch[i,]==1))
+    ch[i,f[i]:n2] <- NA
+  }
+  for (i in 1:dim(ch)[1]){
+    ch[i,1:f[i]] <- NA
+  }
+  return(ch)
+}
+
+# -------------------------------------------
+# SPECIFY MODEL
+# -------------------------------------------
+
+# Specify model in JAGS language
+sink("cjs-age.jags")
+cat("
+    model {
+    
+    # PRIORS AND CONTRAINTS
+    
+    for (i in 1:nind){
+    for (t in f[i]:(n.occasions-1)){
+    phi[i,t] <- beta[x[i,t]]
+    p[i,t] <- p.t[t]
+    } #t
+    } #i
+    
+    for (u in 1:n_g){
+    beta[u] ~ dunif(0, 1)               # Prior for only age-specific survival
+    }
+    
+    for (t in 1:(n.occasions-1)){
+    p.t[t] ~ dunif(0, 1)                # Prior for time-spec. recapture
+    }
+    
+    
+    # LIKELIHOOD 
+    for (i in 1:nind){
+    
+    # Define latent state at first capture
+    z[i,f[i]] <- 1
+    for (t in (f[i]+1):n.occasions){
+    
+    # State process
+    z[i,t] ~ dbern(mu1[i,t])
+    mu1[i,t] <- phi[i,t-1] * z[i,t-1]
+    
+    # Observation process
+    y[i,t] ~ dbern(mu2[i,t])
+    mu2[i,t] <- p[i,t-1] * z[i,t]
+    } #t
+    } #i
+    }
+    ",fill = TRUE)
+sink()
+
+# Bundle data
+jags.data <- list(y = CH, f = f, nind = dim(CH)[1], n.occasions = dim(CH)[2], z = known.state.cjs(CH), x = x, n_g = n_g)
+
+# Initial values
+inits <- function(){list(z = cjs.init.z(CH, f), beta = runif(n_g, 0, 1), p.t = runif((dim(CH)[2]-1), 0, 1))}  
+
+# Parameters monitored
+parameters <- c("p.t", "beta")
+
+# MCMC settings
+ni <- 100000
+nt <- 3
+nb <- 10000
+nc <- 3
+
+# Call JAGS from R (BRT ~20 min)
+cjs.age <- jags(jags.data, inits, parameters, "cjs-age.jags", n.chains = nc, n.thin = nt, n.iter = ni, n.burnin = nb, working.directory = getwd())
+
+print(cjs.age, digits = 3)
+
+# Plot beta
+plot(cjs.age$BUGSoutput$summary[1,1],1, xlim=c(0,1),ylim=c(0,(n_g+1), ylab="Age group", xlab="Estimated survival probability (mean and 95% credible interval)")
+arrows(cjs.age$BUGSoutput$summary[1,3], 1, cjs.age$BUGSoutput$summary[1,7], 1, code = 3, length = 0.1)
+for (n in 2:n_g){
+points(cjs.age$BUGSoutput$summary[n,1],n)
+arrows(cjs.age$BUGSoutput$summary[n,3], n, cjs.age$BUGSoutput$summary[n,7], n, code = 3, length = 0.1)
+}
+
+# Plot p.t
+#mean_line <- cjs.age$BUGSoutput$summary[12:49,1]
+#upper_line <- cjs.age$BUGSoutput$summary[12:49,7]
+#lower_line <- cjs.age$BUGSoutput$summary[12:49,3]
+#x_line <- c(1:38)
+
+#plot(mean_line, type="l", ylim=c(0:1), xaxt='n', xlab="Year", ylab="Probability of recapture")
+#axis(1, at=1:38, labels=c(1978:2014, by=1))
+#polygon(c(x_line,rev(x_line)), c(upper_line,rev(lower_line)), col='grey88',border=NA)
+#lines(mean_line, col="black")
+#lines(upper_line, col='grey48')
+#lines(lower_line, col='grey48')
