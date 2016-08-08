@@ -118,7 +118,7 @@ sink()
 
 # Bundle data
 jags.data <- list(y = CH, f = f, nind = dim(CH)[1], n.occasions = dim(CH)[2], 
-                  z = known.state.cjs(CH), g = length(unique(group)), group = group, x = x)
+                  z = known.state.cjs(CH), g = length(unique(group)), group = group, x = x, n_g = n_g)
 
 # Initial values
 inits <- function(){list(z = cjs.init.z(CH, f), p.g = runif(length(unique(group)), 0, 1), 
