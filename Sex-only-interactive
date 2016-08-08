@@ -6,7 +6,6 @@
 # USER INPUTS
 # ----------------
 CH <- read.delim("...", header=FALSE)
-n.occasions <- dim(CH)[2]
 
 # --------------------------------
 # Create functions
