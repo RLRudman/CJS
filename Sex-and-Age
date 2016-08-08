@@ -1,5 +1,3 @@
-# NOT WORKING
-
 # Cormack-Jolly-Seber for both Sex and Age effects
 # =================================================
 
@@ -12,6 +10,9 @@ CH <- read.delim("...", header=FALSE)
 
 # Group vector specifying sex of each individual
 group <- as.vector(group[,1])
+
+# Number of age groups
+n_g <- ...
 
 # =================================================
 
@@ -87,7 +88,7 @@ cat("
       } #i
       # for survival parameters
       for (u in 1:g){
-        for (a in 1:10){
+        for (a in 1:n_g){
           eta.phi[u,a] ~ dunif(0, 1)     # Prior for time and group-spec. survival
         } #t
       } #g
@@ -121,15 +122,15 @@ jags.data <- list(y = CH, f = f, nind = dim(CH)[1], n.occasions = dim(CH)[2],
 
 # Initial values
 inits <- function(){list(z = cjs.init.z(CH, f), p.g = runif(length(unique(group)), 0, 1), 
-                         eta.phi = matrix(runif(20,0,1), nrow=2, ncol=10))}
+                         eta.phi = matrix(runif((n_g*2),0,1), nrow=2, ncol=n_g))}
 
 # Parameters monitored
 parameters <- c("eta.phi","p.g")
 
 # MCMC settings
-ni <- 5000
+ni <- 50000
 nt <- 3
-nb <- 1000
+nb <- 5000
 nc <- 3
 
 # Call JAGS from R (BRT 7 min)
