@@ -1,0 +1,158 @@
+# NOT WORKING
+
+# Cormack-Jolly-Seber for both Sex and Age effects
+# =================================================
+
+# --------------
+# USER INPUTS
+# --------------
+
+# Ensure CH is a matrix and fill NA with zeros
+CH <- read.delim("...", header=FALSE)
+
+# Group vector specifying sex of each individual
+group <- as.vector(group[,1])
+
+# =================================================
+
+# Create vector with occasion of marking
+get.first <- function(x) min(which(x!=0))
+f <- apply(CH, 1, get.first)
+
+# Create matrix x indicating age class
+x <- matrix(NA, ncol = dim(CH)[2]+10, nrow = dim(CH)[1])
+n_groups <- seq(1, 10, by=1)
+for (n in n_g:10){
+  n_groups[n] <- n_g
+}
+
+for (i in 1:dim(CH)[1]){
+  for (t in f[i]:(dim(CH)[2]-1)){
+    x[i,t+9] <- n_groups[10]
+    x[i,f[i]+8] <- n_groups[9]
+    x[i,f[i]+7] <- n_groups[8]
+    x[i,f[i]+6] <- n_groups[7]  
+    x[i,f[i]+5] <- n_groups[6]  
+    x[i,f[i]+4] <- n_groups[5]  
+    x[i,f[i]+3] <- n_groups[4]  
+    x[i,f[i]+2] <- n_groups[3]  
+    x[i,f[i]+1] <- n_groups[2]  
+    x[i,f[i]] <- n_groups[1]  
+  } #t
+} #i
+
+x <- x[,-((dim(CH)[2]+1):(dim(CH)[2]+11))]
+
+# --------------------------------
+# Create functions
+# --------------------------------
+
+# Function to create a matrix with information about known latent state z
+known.state.cjs <- function(ch){
+  state <- ch
+  for (i in 1:dim(ch)[1]){
+    n1 <- min(which(ch[i,]==1))
+    n2 <- max(which(ch[i,]==1))
+    state[i,n1:n2] <- 1
+    state[i,n1] <- NA
+  }
+  state[state==0] <- NA
+  return(state)
+}
+
+# Function to create a matrix of initial values for latent state z
+cjs.init.z <- function(ch,f){
+  for (i in 1:dim(ch)[1]){
+    if (sum(ch[i,])==1) next
+    n2 <- max(which(ch[i,]==1))
+    ch[i,f[i]:n2] <- NA
+  }
+  for (i in 1:dim(ch)[1]){
+    ch[i,1:f[i]] <- NA
+  }
+  return(ch)
+}
+
+# Specify model in JAGS language
+sink("cjs-sex-age.jags")
+cat("
+    model {
+    
+      # Priors and constraints
+      for (i in 1:nind){
+        for (t in f[i]:(n.occasions-1)){
+          phi[i,t] <- eta.phi[group[i],x[i,t]]
+          p[i,t] <- p.g[group[i]]
+        } #t
+      } #i
+      # for survival parameters
+      for (u in 1:g){
+        for (a in 1:10){
+          eta.phi[u,a] ~ dunif(0, 1)     # Prior for time and group-spec. survival
+        } #t
+      } #g
+      # for recapture parameters
+      for (u in 1:g){
+        p.g[u] ~ dunif(0, 1)              # Priors for group-spec. recapture
+      }
+    
+    # Likelihood 
+    for (i in 1:nind){
+    # Define latent state at first capture
+      z[i,f[i]] <- 1
+    for (t in (f[i]+1):n.occasions){
+    
+    # State process
+      z[i,t] ~ dbern(mu1[i,t])
+      mu1[i,t] <- phi[i,t-1] * z[i,t-1]
+    
+    # Observation process
+      y[i,t] ~ dbern(mu2[i,t])
+      mu2[i,t] <- p[i,t-1] * z[i,t]
+      } #t
+    } #i
+    }
+    ",fill = TRUE)
+sink()
+
+# Bundle data
+jags.data <- list(y = CH, f = f, nind = dim(CH)[1], n.occasions = dim(CH)[2], 
+                  z = known.state.cjs(CH), g = length(unique(group)), group = group, x = x)
+
+# Initial values
+inits <- function(){list(z = cjs.init.z(CH, f), p.g = runif(length(unique(group)), 0, 1), 
+                         eta.phi = matrix(runif(20,0,1), nrow=2, ncol=10))}
+
+# Parameters monitored
+parameters <- c("eta.phi","p.g")
+
+# MCMC settings
+ni <- 5000
+nt <- 3
+nb <- 1000
+nc <- 3
+
+# Call JAGS from R (BRT 7 min)
+cjs.int <- jags(jags.data, inits, parameters, "cjs-sex-age.jags", n.chains = nc, n.thin = nt, n.iter = ni, 
+                n.burnin = nb, working.directory = getwd())
+
+# Summarize posteriors
+print(cjs.int, digits = 3) 
+
+# Plot data
+odds_index <- seq(1, length(CH)[2], 2)
+evens_index <- seq(2, length(CH)[2], 2)
+
+plot(cjs.int$BUGSoutput$summary[2,1],1, xlim=c(0.3,0.9),ylim=c(0,11), ylab="Age group", 
+      xlab="Estimated survival probability (mean and 95% credible interval)")
+arrows(cjs.int$BUGSoutput$summary[2,3], 1, cjs.int$BUGSoutput$summary[2,7], 1, code = 3, length = 0.1)
+
+for (n in evens_index){
+  points(cjs.int$BUGSoutput$summary[n,1],2)
+  arrows(cjs.int$BUGSoutput$summary[n,3], 2, cjs.int$BUGSoutput$summary[n,7], 2, code = 3, length = 0.1)
+}
+
+for (n in odds_index){
+  points(cjs.int$BUGSoutput$summary[n,1], 1.2, col="blue")
+  arrows(cjs.int$BUGSoutput$summary[n,3], 1.2, cjs.int$BUGSoutput$summary[3,7], 1.2, code = 3, length = 0.1, col="blue")
+}
