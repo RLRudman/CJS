@@ -1,0 +1,132 @@
+# Cormack-Jolly-Seber model for interactive sex effects
+# =====================================================
+# See Sex only wiki for details on interactive and additive sex effects models
+
+# ----------------
+# USER INPUTS
+# ----------------
+CH <- read.delim("...", header=FALSE)
+n.occasions <- dim(CH)[2]
+
+# --------------------------------
+# Create functions
+# --------------------------------
+
+# Function: vector with occasion of first marking
+get.first <- function(x)min(which(x!=0))
+f <- apply(CH, 1, get.first)
+
+# Function to create a matrix with information about known latent state z
+known.state.cjs <- function(ch){
+  state <- ch
+  for (i in 1:dim(ch)[1]){
+    n1 <- min(which(ch[i,]==1))
+    n2 <- max(which(ch[i,]==1))
+    state[i,n1:n2] <- 1
+    state[i,n1] <- NA
+  }
+  state[state==0] <- NA
+  return(state)
+}
+
+# Function to create a matrix of initial values for latent state z
+cjs.init.z <- function(ch,f){
+  for (i in 1:dim(ch)[1]){
+    if (sum(ch[i,])==1) next
+    n2 <- max(which(ch[i,]==1))
+    ch[i,f[i]:n2] <- NA
+  }
+  for (i in 1:dim(ch)[1]){
+    ch[i,1:f[i]] <- NA
+  }
+  return(ch)
+}
+
+# Specify model in JAGS language
+sink("cjs_sex.jags")
+cat("
+
+  model{
+
+    # PRIORS and CONSTRAINTS
+    for (i in 1:nind){
+      for (t in f[i]:(n.occasions-1)){
+      logit(phi[i,t]) <- eta.phi[group[i],t]
+      p[i,t] <- p.g[group[i]]
+      } # t
+    } # i
+
+    # for survival parameters
+    for (u in 1:g){
+      for (t in 1:(n.occasions-1)){
+        eta.phi[u,t] ~ dunif(0,1)
+      } # t
+    } # u
+
+    # for recapture parameters
+    for (u in 1:g){
+      p.g[u] ~ dunif(0,1)
+    } # u
+
+  # LIKELIHOOD
+    for (i in 1:nind){
+
+      # define latent state at first capture
+      z[i,f[i]] <- 1
+      for (t in (f[i]+1):n.occasions){
+
+        # State process
+        z[i,t] ~ dbern(mu1[i,t])
+        mu1[i,t] <- phi[i,t-1] * z[i,t-1]
+
+        # Observation process
+        y[i,t] ~ dbern(mu2[i,t])
+        mu2[i,t] <- p[i,t-1] *z[i,t]
+      } # t
+    } # i
+
+} # model
+
+", fill=TRUE)
+sink()
+
+# Bundle data
+jags.data <- list(y = CH, f=f, nind=dim(CH)[1], n.occasions=dim(CH)[2], z=known.state.cjs(CH), 
+                  g=length(unique(group)), group=group)
+
+# Initial values
+inits <- function(){list(z = cjs.init.z(CH,f), gamma = rnorm(n.occasions-1), beta=c(NA,rnorm(1)), 
+                  p.g = runif(length(unique(group)),0,1) )}
+
+# Parameters monitored
+parameters <- c("p.g", "eta.phi")
+
+# MCMC settings
+ni <- 5000
+nt <- 3
+nb <- 2000
+nc <- 3
+
+# Call JAGS from R
+cjs.sex <- jags(jags.data, inits, parameters, "cjs_sex.jags", n.chains = nc, n.thin = nt,
+                n.iter = ni, n.burnin = nb, working.directory=getwd())
+
+# Summarise posteriors
+print(cjs.sex, digits = 3)
+
+# Figure of male and female survival
+lower.f <- upper.f <- lower.m <- upper.m <- numeric()
+for ( t in 1:(n.occasions-1)){
+  lower.f[t] <- quantile(cjs.sex$BUGSoutput$sims.list$eta.phi[,1,t],0.025)
+  upper.f[t] <- quantile(cjs.sex$BUGSoutput$sims.list$eta.phi[,1,t],0.975)
+  lower.m[t] <- quantile(cjs.sex$BUGSoutput$sims.list$eta.phi[,2,t],0.025)
+  upper.m[t] <- quantile(cjs.sex$BUGSoutput$sims.list$eta.phi[,2,t],0.975)
+}
+plot(x=(1:(n.occasions-1))-0.01, y=cjs.sex$BUGSoutput$mean$eta.phi[1,], type="b", pch=16, ylim=c(0,1), 
+     ylab="Survival probability", xlab="Year", bty="n", cex=1.5, axes=FALSE)
+axis(1, at=1:(dim(CH)[2]-1), labels=rep(NA,(dim(CH)[2]-1)), tcl=-0.25)
+axis(1, at=seq(2,25,2), labels=c("85","87","89","91","93","95","97","99","01","03","05","07"))
+axis(2, at=seq(0,1,0.1), labels=c("0.0",NA,"0.2",NA,"0.4",NA,"0.6",NA,"0.8",NA,"1.0"), las=1)
+segments((1:(n.occasions-1))-0.1, lower.f, (1:(n.occasions-1))-0.1, upper.f, col="blue")
+points(x=(1:(n.occasions-1))+0.1, y=cjs.sex$BUGSoutput$mean$eta.phi[2,], type="b", pch=1, lty=2, cex=1.5)
+segments((1:(n.occasions-1))+0.1, lower.m, (1:(n.occasions-1))+0.1, upper.m, col="red")
