@@ -134,26 +134,24 @@ nb <- 5000
 nc <- 3
 
 # Call JAGS from R (BRT 7 min)
-cjs.int <- jags(jags.data, inits, parameters, "cjs-sex-age.jags", n.chains = nc, n.thin = nt, n.iter = ni, 
+cjs.sex.age <- jags(jags.data, inits, parameters, "cjs-sex-age.jags", n.chains = nc, n.thin = nt, n.iter = ni, 
                 n.burnin = nb, working.directory = getwd())
 
 # Summarize posteriors
-print(cjs.int, digits = 3) 
+print(cjs.sex.age, digits = 3) 
 
 # Plot data
-odds_index <- seq(1, length(CH)[2], 2)
-evens_index <- seq(2, length(CH)[2], 2)
+female_index <- seq(3, ((n_g*2)+2), 2)
+male_index <- seq(2, (n_g*2), 2)
 
-plot(cjs.int$BUGSoutput$summary[2,1],1, xlim=c(0.3,0.9),ylim=c(0,11), ylab="Age group", 
-      xlab="Estimated survival probability (mean and 95% credible interval)")
-arrows(cjs.int$BUGSoutput$summary[2,3], 1, cjs.int$BUGSoutput$summary[2,7], 1, code = 3, length = 0.1)
-
-for (n in evens_index){
-  points(cjs.int$BUGSoutput$summary[n,1],2)
-  arrows(cjs.int$BUGSoutput$summary[n,3], 2, cjs.int$BUGSoutput$summary[n,7], 2, code = 3, length = 0.1)
+plot(cjs.int$BUGSoutput$summary[2,1],1, xlim=c(0.3,0.9),ylim=c(0, (n_g+1)), ylab="Age group", 
+     xlab="Estimated survival probability (mean and 95% credible interval)", type="n")
+for (n in male_index){
+  points(cjs.int$BUGSoutput$summary[n,1], ((male_index[n/2]/2)-0.1))
+  arrows(cjs.int$BUGSoutput$summary[n,3], ((male_index[n/2]/2)-0.1), cjs.int$BUGSoutput$summary[n,7], ((male_index[n/2]/2)-0.1), code = 3, length = 0.1)
 }
 
-for (n in odds_index){
-  points(cjs.int$BUGSoutput$summary[n,1], 1.2, col="blue")
-  arrows(cjs.int$BUGSoutput$summary[n,3], 1.2, cjs.int$BUGSoutput$summary[3,7], 1.2, code = 3, length = 0.1, col="blue")
+for (n in female_index){
+  points(cjs.int$BUGSoutput$summary[n,1], ((((female_index[(n-1)/2])-1)/2)+0.1), col="blue")
+  arrows(cjs.int$BUGSoutput$summary[n,3], ((((female_index[(n-1)/2])-1)/2)+0.1), cjs.int$BUGSoutput$summary[n,7], ((((female_index[(n-1)/2])-1)/2)+0.1), code = 3, length = 0.1, col="blue")
 }
